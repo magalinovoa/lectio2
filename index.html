@@ -367,18 +367,17 @@ function analyzeLines(lines, pageNum) {
     subheadings: [], paragraphs: [], blockquotes: [], footnotes: [], is_chapter_start: false
   };
 
-  // Calcular fontSize promedio para detectar títulos
   const fontSizes = lines.map(l => l.fontSize).filter(s => s > 0);
   const avgFontSize = fontSizes.reduce((a, b) => a + b, 0) / fontSizes.length;
-  const minFontSize = Math.min(...fontSizes);
 
-  // Detectar zona de notas al pie: último 20% de la página
-  // Y también por tamaño de fuente menor al promedio
+  // En PDF.js Y crece hacia arriba — mayor Y = más arriba en la página
   const ys = lines.map(l => l.y);
   const pageTop = Math.max(...ys);
   const pageBottom = Math.min(...ys);
   const pageHeight = pageTop - pageBottom;
-  const footnoteZone = pageBottom + pageHeight * 0.20;
+
+  // Notas al pie: último 22% de la página (Y bajo = parte inferior)
+  const footnoteThreshold = pageBottom + pageHeight * 0.22;
 
   let heading = null;
   let heading_level = null;
@@ -386,27 +385,21 @@ function analyzeLines(lines, pageNum) {
   const paragraphLines = [];
   const footnoteLines = [];
   const subheadings = [];
-  let inFootnoteSection = false;
 
   for (const line of lines) {
     const text = line.text.trim();
     if (!text) continue;
 
+    const isSmallFont = line.fontSize < avgFontSize * 0.88;
     const isLargeFont = line.fontSize > avgFontSize * 1.3;
     const isMediumFont = line.fontSize > avgFontSize * 1.1;
-    const isSmallFont = line.fontSize < avgFontSize * 0.9;
     const isShortLine = text.length < 60;
-    const isInFootnoteZone = line.y < footnoteZone;
+    const isInFootnoteZone = line.y < footnoteThreshold;
 
-    // Detectar inicio de sección de notas al pie
-    // Un número o símbolo solo al inicio, o fuente pequeña en zona inferior
-    const startsFootnote = /^[\d]+[\s\.]/.test(text) || /^[\*†‡]/.test(text) || /^\[\d+\]/.test(text);
+    // Nota al pie: fuente pequeña en zona inferior, O empieza con número/símbolo en zona inferior
+    const startsWithNoteMarker = /^[\*†‡]/.test(text) || /^\d+\s+[A-ZÁÉÍÓÚÑ\[\(«]/.test(text);
 
-    if (isInFootnoteZone && startsFootnote) {
-      inFootnoteSection = true;
-    }
-
-    if (inFootnoteSection || (isInFootnoteZone && isSmallFont)) {
+    if (isInFootnoteZone && (isSmallFont || startsWithNoteMarker)) {
       footnoteLines.push(text);
     } else if (isLargeFont && isShortLine) {
       if (!heading) {
@@ -424,21 +417,26 @@ function analyzeLines(lines, pageNum) {
     }
   }
 
-  // Agrupar líneas en párrafos
+  // Agrupar líneas en párrafos — una línea nueva después de punto es nuevo párrafo
   const paragraphs = [];
   let current = '';
-  for (const line of paragraphLines) {
+  for (let i = 0; i < paragraphLines.length; i++) {
+    const line = paragraphLines[i];
     if (!current) {
       current = line;
-    } else if (line.length < 45 && /[.!?»]$/.test(current)) {
-      current += ' ' + line;
-      paragraphs.push(current.trim());
-      current = '';
     } else {
-      current += ' ' + line;
+      // Nueva línea sangrada (empieza con mayúscula después de un párrafo completo) = nuevo párrafo
+      const prevEndsWithPunct = /[.!?»)]$/.test(current.trimEnd());
+      const currStartsWithUpper = /^[A-ZÁÉÍÓÚÑ«¿¡]/.test(line.trimStart());
+      if (prevEndsWithPunct && currStartsWithUpper && line.length > 20) {
+        paragraphs.push(current.trim());
+        current = line;
+      } else {
+        current += ' ' + line;
+      }
     }
   }
-  if (current) paragraphs.push(current.trim());
+  if (current.trim()) paragraphs.push(current.trim());
 
   // Detectar tipo de página
   let type = 'content';
