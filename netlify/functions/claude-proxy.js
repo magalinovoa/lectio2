@@ -49,14 +49,28 @@ exports.handler = async (event) => {
 
     const data = await response.json();
 
-    return {
-      statusCode: response.status,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
-      body: JSON.stringify(data),
-    };
+// Si Gemini no devuelve candidates, retornamos el error completo para debugging
+if (!data.candidates || data.candidates.length === 0) {
+  return {
+    statusCode: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    },
+    body: JSON.stringify({ 
+      error: { message: `Gemini no devolvió respuesta: ${JSON.stringify(data)}` }
+    }),
+  };
+}
+
+return {
+  statusCode: response.status,
+  headers: {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+  },
+  body: JSON.stringify(data),
+};
   } catch (err) {
     return {
       statusCode: 502,
