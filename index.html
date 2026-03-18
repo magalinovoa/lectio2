@@ -475,22 +475,11 @@ async function renderPage(page, scale=2) {
   return canvas.toDataURL('image/jpeg', 0.88).split(',')[1];
 }
 
-async function analyzePageWithClaude(b64, prompt, apiKey) {
+async function analyzePageWithClaude(b64, prompt) {
   const res = await fetch(PROXY_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      apiKey,
-      model: 'claude-opus-4-5',
-      max_tokens: 2048,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } },
-          { type: 'text', text: prompt }
-        ]
-      }]
-    })
+    body: JSON.stringify({ imageBase64: b64, prompt })
   });
 
   if (!res.ok) {
@@ -501,7 +490,7 @@ async function analyzePageWithClaude(b64, prompt, apiKey) {
   const data = await res.json();
   if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
 
-  const raw = data.content[0].text.trim();
+  const raw = data.candidates[0].content.parts[0].text.trim();
   const cleaned = raw.replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
   return JSON.parse(cleaned);
 }
