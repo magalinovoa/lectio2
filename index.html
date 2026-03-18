@@ -636,6 +636,22 @@ function stopConversion() {
   log('⚠ Conversión detenida por el usuario.', 'log-info');
   document.getElementById('btnStop').disabled = true;
 }
+
+function log(msg, cls='') {
+  const el = document.getElementById('progressLog');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  const ts = new Date().toLocaleTimeString('es', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  line.textContent = `[${ts}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function setProgress(pct, label) {
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('progressText').textContent = label;
+}
   
 async function startConversion() {
   if (!pdfDoc) return;
