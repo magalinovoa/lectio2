@@ -42,7 +42,10 @@ exports.handler = async (event) => {
               { text: prompt }
             ]
           }],
-          generationConfig: { maxOutputTokens: 8192 }
+          generationConfig: { 
+            maxOutputTokens: 8192,
+            responseMimeType: "application/json"
+          }
         })
       }
     );
