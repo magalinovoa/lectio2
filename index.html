@@ -683,8 +683,7 @@ function crc32(buf) {
 }
 
 async function startConversion() {
-  const apiKey = document.getElementById('apiKey').value.trim();
-  if (!apiKey || !pdfDoc) return;
+if (!pdfDoc) return;
 
   const level  = document.querySelector('input[name=ocr]:checked').value;
   const prompt = PROMPTS[level];
@@ -710,7 +709,7 @@ async function startConversion() {
       const page = await pdfDoc.getPage(pageNum);
       const b64  = await renderPage(page);
       try {
-        const result = await analyzePageWithClaude(b64, prompt, apiKey);
+        const result = await analyzePageWithClaude(b64, prompt);
         log(`  ✓ Página ${pageNum} — tipo: ${result.type||'?'}`, 'log-ok');
         return result;
       } catch(e) {
