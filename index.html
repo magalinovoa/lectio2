@@ -402,8 +402,7 @@ function clearFile() {
 }
 
 function checkReady() {
-  const key = document.getElementById('apiKey').value.trim();
-  document.getElementById('btnConvert').disabled = !(key && pdfFile);
+  document.getElementById('btnConvert').disabled = !pdfFile;
 }
 
 const PROMPTS = {
