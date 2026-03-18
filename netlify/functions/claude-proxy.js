@@ -5,7 +5,7 @@ exports.handler = async (event) => {
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, x-api-key",
+        "Access-Control-Allow-Headers": "Content-Type",
       },
       body: "",
     };
@@ -15,7 +15,11 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  // The API key is passed from the client in the request body (never stored server-side)
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return { statusCode: 500, body: JSON.stringify({ error: "API key not configured" }) };
+  }
+
   let payload;
   try {
     payload = JSON.parse(event.body);
@@ -23,25 +27,25 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON" }) };
   }
 
-  const { apiKey, ...anthropicPayload } = payload;
-
-  if (!apiKey || !apiKey.startsWith("sk-ant")) {
-    return {
-      statusCode: 401,
-      body: JSON.stringify({ error: "Missing or invalid API key" }),
-    };
-  }
+  const { imageBase64, prompt } = payload;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(anthropicPayload),
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inline_data: { mime_type: "image/jpeg", data: imageBase64 } },
+              { text: prompt }
+            ]
+          }],
+          generationConfig: { maxOutputTokens: 2048 }
+        })
+      }
+    );
 
     const data = await response.json();
 
