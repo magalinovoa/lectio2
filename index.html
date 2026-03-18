@@ -684,7 +684,6 @@ function crc32(buf) {
 
 async function startConversion() {
 if (!pdfDoc) return;
-
   const level  = document.querySelector('input[name=ocr]:checked').value;
   const prompt = PROMPTS[level];
   const total  = pdfDoc.numPages;
