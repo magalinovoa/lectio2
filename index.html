@@ -337,7 +337,7 @@ async function extractPageText(page) {
       currentLine = { y, text: text, fontSize: item.height, x: item.transform[4] };
       lines.push(currentLine);
     } else {
-      currentLine.text += text;
+      currentLine.text += ' ' + text;
     }
   }
 
