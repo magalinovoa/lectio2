@@ -42,7 +42,7 @@ exports.handler = async (event) => {
               { text: prompt }
             ]
           }],
-          generationConfig: { maxOutputTokens: 2048 }
+          generationConfig: { maxOutputTokens: 8192 }
         })
       }
     );
