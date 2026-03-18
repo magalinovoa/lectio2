@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lectio — PDF a EPUB</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1410;
+    --paper: #f5f0e8;
+    --cream: #ede7d9;
+    --sepia: #8b6f47;
+    --rust: #c4622d;
+    --gold: #d4a853;
+    --muted: #9a8c7e;
+    --line: #d9cfc2;
+    --success: #4a7c59;
+    --error: #c4622d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+  header {
+    padding: 2.5rem 3rem 2rem;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    position: relative;
+    z-index: 1;
+  }
+  .logo { font-family: 'Playfair Display', serif; font-size: 2.2rem; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
+  .logo span { color: var(--rust); }
+  .tagline { font-family: 'DM Mono', monospace; font-size: 0.72rem; font-weight: 300; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+  main { flex: 1; max-width: 780px; width: 100%; margin: 0 auto; padding: 3rem 2rem; position: relative; z-index: 1; }
+  .section-label {
+    font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 0.75rem;
+    display: flex; align-items: center; gap: 0.6rem;
+  }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+  .card {
+    background: #fff9f2; border: 1px solid var(--line); border-radius: 3px;
+    padding: 1.6rem; margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03);
+  }
+  .api-row { display: flex; gap: 0.6rem; align-items: center; }
+  .api-input {
+    flex: 1; font-family: 'DM Mono', monospace; font-size: 0.8rem;
+    padding: 0.7rem 1rem; border: 1px solid var(--line); border-radius: 2px;
+    background: var(--paper); color: var(--ink); outline: none;
+    transition: border-color 0.15s; letter-spacing: 0.03em;
+  }
+  .api-input:focus { border-color: var(--sepia); }
+  .api-input::placeholder { color: var(--muted); }
+  .btn-sm {
+    font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 0.06em;
+    padding: 0.7rem 1.1rem; border: 1px solid var(--line); border-radius: 2px;
+    background: var(--cream); color: var(--sepia); cursor: pointer;
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .btn-sm:hover { background: var(--sepia); color: #fff; border-color: var(--sepia); }
+  .api-status {
+    font-family: 'DM Mono', monospace; font-size: 0.68rem;
+    margin-top: 0.5rem; padding: 0.4rem 0.8rem; border-radius: 2px; display: none;
+  }
+  .api-status.ok { background: #eef7f1; color: var(--success); display: block; }
+  .api-status.err { background: #fdf0ea; color: var(--error); display: block; }
+  .dropzone {
+    border: 1.5px dashed var(--line); border-radius: 3px; padding: 3rem 2rem;
+    text-align: center; cursor: pointer; transition: all 0.2s; position: relative; background: var(--paper);
+  }
+  .dropzone:hover, .dropzone.drag { border-color: var(--sepia); background: #fdf7ef; }
+  .dropzone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .drop-icon { font-size: 2.4rem; margin-bottom: 0.8rem; opacity: 0.5; }
+  .drop-title { font-family: 'Playfair Display', serif; font-size: 1.1rem; color: var(--ink); margin-bottom: 0.35rem; }
+  .drop-sub { font-size: 0.78rem; color: var(--muted); font-family: 'DM Mono', monospace; font-weight: 300; }
+  .file-chosen { display: none; align-items: center; gap: 0.8rem; padding: 0.8rem 1rem; background: #eef7f1; border: 1px solid #c2dcc9; border-radius: 2px; margin-top: 1rem; }
+  .file-chosen.show { display: flex; }
+  .file-chosen-name { font-family: 'DM Mono', monospace; font-size: 0.78rem; color: var(--success); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-clear { cursor: pointer; color: var(--muted); font-size: 0.9rem; line-height: 1; background: none; border: none; padding: 0; }
+  .file-clear:hover { color: var(--rust); }
+  .ocr-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.7rem; }
+  .ocr-option input { display: none; }
+  .ocr-label { display: block; border: 1px solid var(--line); border-radius: 2px; padding: 1rem 0.8rem; cursor: pointer; transition: all 0.15s; background: var(--paper); }
+  .ocr-option input:checked + .ocr-label { border-color: var(--sepia); background: #fdf7ef; box-shadow: inset 0 0 0 1px var(--sepia); }
+  .ocr-label:hover { border-color: var(--sepia); }
+  .ocr-name { font-family: 'Playfair Display', serif; font-size: 0.92rem; font-weight: 600; display: block; margin-bottom: 0.3rem; }
+  .ocr-desc { font-family: 'DM Mono', monospace; font-size: 0.64rem; font-weight: 300; color: var(--muted); line-height: 1.5; display: block; }
+  .ocr-badge { font-family: 'DM Mono', monospace; font-size: 0.58rem; letter-spacing: 0.08em; padding: 0.15rem 0.45rem; border-radius: 1px; margin-top: 0.4rem; display: inline-block; }
+  .badge-fast { background: #eef7f1; color: var(--success); }
+  .badge-rec { background: #fdf7ef; color: var(--rust); }
+  .badge-slow { background: #f5f0e8; color: var(--sepia); }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+  .field-group label { font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 0.35rem; }
+  .field-group input { width: 100%; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; padding: 0.6rem 0.8rem; border: 1px solid var(--line); border-radius: 2px; background: var(--paper); color: var(--ink); outline: none; transition: border-color 0.15s; }
+  .field-group input:focus { border-color: var(--sepia); }
+  .field-group input::placeholder { color: var(--line); }
+  .btn-convert {
+    width: 100%; padding: 1.05rem; font-family: 'Playfair Display', serif;
+    font-size: 1.05rem; font-style: italic; background: var(--ink); color: var(--paper);
+    border: none; border-radius: 2px; cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 0.6rem; letter-spacing: 0.01em;
+  }
+  .btn-convert:hover:not(:disabled) { background: var(--sepia); }
+  .btn-convert:disabled { opacity: 0.45; cursor: not-allowed; }
+  #progress-section { display: none; }
+  #progress-section.show { display: block; }
+  .progress-log { font-family: 'DM Mono', monospace; font-size: 0.72rem; line-height: 1.8; max-height: 200px; overflow-y: auto; padding: 1rem; background: var(--ink); color: #b8a990; border-radius: 2px; }
+  .progress-log .log-ok { color: #7ec99a; }
+  .progress-log .log-err { color: #e8806a; }
+  .progress-log .log-info { color: #d4a853; }
+  .progress-bar-wrap { height: 3px; background: var(--line); border-radius: 2px; margin: 1rem 0 0.5rem; overflow: hidden; }
+  .progress-bar { height: 100%; background: var(--rust); width: 0%; transition: width 0.3s ease; }
+  .progress-label { font-family: 'DM Mono', monospace; font-size: 0.68rem; color: var(--muted); display: flex; justify-content: space-between; margin-bottom: 0.8rem; }
+  #result-section { display: none; }
+  #result-section.show { display: block; }
+  .result-card { background: #eef7f1; border: 1px solid #c2dcc9; border-radius: 3px; padding: 1.8rem; text-align: center; }
+  .result-title { font-family: 'Playfair Display', serif; font-size: 1.3rem; color: var(--success); margin-bottom: 0.4rem; }
+  .result-sub { font-size: 0.8rem; color: var(--muted); margin-bottom: 1.4rem; font-family: 'DM Mono', monospace; font-weight: 300; }
+  .btn-download { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.85rem 2rem; background: var(--success); color: #fff; border: none; border-radius: 2px; font-family: 'DM Mono', monospace; font-size: 0.78rem; letter-spacing: 0.06em; cursor: pointer; text-decoration: none; transition: all 0.15s; }
+  .btn-download:hover { background: #3a6347; }
+  .btn-reset { display: inline-block; margin-top: 1rem; font-family: 'DM Mono', monospace; font-size: 0.7rem; color: var(--muted); cursor: pointer; text-decoration: underline; background: none; border: none; }
+  .btn-reset:hover { color: var(--ink); }
+  .info-toggle { font-family: 'DM Mono', monospace; font-size: 0.68rem; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 0.4rem; background: none; border: none; padding: 0; margin-top: 0.5rem; }
+  .info-toggle:hover { color: var(--sepia); }
+  .info-panel { display: none; margin-top: 0.8rem; padding: 1rem; background: var(--cream); border-radius: 2px; font-size: 0.78rem; color: var(--muted); line-height: 1.7; }
+  .info-panel.open { display: block; }
+  .info-panel ul { padding-left: 1.2rem; }
+  .info-panel li { margin-bottom: 0.25rem; }
+  .deploy-banner {
+    background: #fdf7ef; border: 1px solid var(--gold); border-radius: 3px;
+    padding: 1rem 1.2rem; margin-bottom: 1.5rem;
+    font-family: 'DM Mono', monospace; font-size: 0.72rem; color: var(--sepia);
+    line-height: 1.7;
+  }
+  .deploy-banner strong { color: var(--rust); }
+  footer { padding: 1.5rem 3rem; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1; }
+  .footer-note { font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--muted); }
+  @media (max-width: 600px) {
+    header { padding: 1.5rem; }
+    main { padding: 1.5rem 1rem; }
+    .ocr-options { grid-template-columns: 1fr; }
+    .meta-grid { grid-template-columns: 1fr; }
+    footer { padding: 1rem 1.5rem; flex-direction: column; gap: 0.5rem; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">L<span>e</span>ctio</div>
+  <div class="tagline">PDF → EPUB · Motor Claude Vision</div>
+</header>
+
+<main>
+
+  <!-- Deploy notice — only visible when opening locally -->
+  <div class="deploy-banner" id="localWarning" style="display:none">
+    ⚠ Estás abriendo este archivo <strong>localmente</strong>. Para que funcione, subí la carpeta completa a <strong>Netlify</strong> (drag &amp; drop). Ver instrucciones abajo.
+  </div>
+
+  <!-- API Key -->
+  <div class="section-label">01 — Clave de API</div>
+  <div class="card">
+    <div class="api-row">
+      <input class="api-input" type="password" id="apiKey" placeholder="sk-ant-api03-..." autocomplete="off">
+      <button class="btn-sm" onclick="saveKey()">Guardar</button>
+      <button class="btn-sm" onclick="clearKey()">Borrar</button>
+    </div>
+    <div id="apiStatus" class="api-status"></div>
+    <button class="info-toggle" onclick="toggleInfo('infoApi')">▸ ¿Dónde obtengo mi API Key?</button>
+    <div id="infoApi" class="info-panel">
+      Tu API Key de Anthropic se obtiene en <strong>console.anthropic.com</strong>.
+      Se guarda solo en el almacenamiento local de tu navegador y nunca queda almacenada en el servidor.
+      Cada conversión consume tokens de tu cuenta.
+    </div>
+  </div>
+
+  <!-- PDF Upload -->
+  <div class="section-label">02 — Archivo PDF</div>
+  <div class="card">
+    <div class="dropzone" id="dropzone">
+      <input type="file" id="pdfInput" accept=".pdf" onchange="onFileChange(event)">
+      <div class="drop-icon">📄</div>
+      <div class="drop-title">Arrastrá tu PDF aquí</div>
+      <div class="drop-sub">o hacé clic para seleccionar · máx. recomendado 300 páginas</div>
+    </div>
+    <div class="file-chosen" id="fileChosen">
+      <span>📗</span>
+      <span class="file-chosen-name" id="fileName">—</span>
+      <span id="filePages" style="font-family:'DM Mono',monospace;font-size:0.68rem;color:var(--muted)"></span>
+      <button class="file-clear" onclick="clearFile()">✕</button>
+    </div>
+  </div>
+
+  <!-- OCR Level -->
+  <div class="section-label">03 — Nivel de OCR</div>
+  <div class="card">
+    <div class="ocr-options">
+      <label class="ocr-option">
+        <input type="radio" name="ocr" value="standard">
+        <span class="ocr-label">
+          <span class="ocr-name">Estándar</span>
+          <span class="ocr-desc">Extracción básica, rápido para textos digitales limpios</span>
+          <span class="ocr-badge badge-fast">RÁPIDO</span>
+        </span>
+      </label>
+      <label class="ocr-option">
+        <input type="radio" name="ocr" value="exhaustive" checked>
+        <span class="ocr-label">
+          <span class="ocr-name">Exhaustivo</span>
+          <span class="ocr-desc">Preserva estructura, jerarquías, notas al pie, cursivas</span>
+          <span class="ocr-badge badge-rec">RECOMENDADO</span>
+        </span>
+      </label>
+      <label class="ocr-option">
+        <input type="radio" name="ocr" value="academic">
+        <span class="ocr-label">
+          <span class="ocr-name">Académico</span>
+          <span class="ocr-desc">Máxima precisión. Ideal para Freud, textos filosóficos</span>
+          <span class="ocr-badge badge-slow">MÁS LENTO</span>
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Metadata -->
+  <div class="section-label">04 — Metadatos del libro (opcional)</div>
+  <div class="card">
+    <div class="meta-grid">
+      <div class="field-group">
+        <label>Título</label>
+        <input type="text" id="metaTitle" placeholder="Título del libro">
+      </div>
+      <div class="field-group">
+        <label>Autor / a</label>
+        <input type="text" id="metaAuthor" placeholder="Nombre del autor">
+      </div>
+      <div class="field-group">
+        <label>Idioma</label>
+        <input type="text" id="metaLang" placeholder="es" value="es">
+      </div>
+      <div class="field-group">
+        <label>Editorial</label>
+        <input type="text" id="metaPublisher" placeholder="opcional">
+      </div>
+    </div>
+  </div>
+
+  <!-- Convert button -->
+  <button class="btn-convert" id="btnConvert" onclick="startConversion()" disabled>
+    <span>Convertir a EPUB</span>
+  </button>
+
+  <!-- Progress -->
+  <div id="progress-section">
+    <div style="margin-top:1.8rem;">
+      <div class="progress-label">
+        <span id="progressText">Iniciando…</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="progress-log" id="progressLog"></div>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div id="result-section">
+    <div style="margin-top:1.8rem;">
+      <div class="result-card">
+        <div class="result-title">✓ EPUB generado</div>
+        <div class="result-sub" id="resultSub">—</div>
+        <a id="downloadLink" class="btn-download" download>↓ Descargar EPUB</a>
+        <br>
+        <button class="btn-reset" onclick="resetAll()">Convertir otro PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deploy instructions -->
+  <div style="margin-top:3rem;">
+    <div class="section-label">Instrucciones de deploy</div>
+    <div class="card">
+      <div style="font-family:'DM Mono',monospace;font-size:0.75rem;color:var(--muted);line-height:2;">
+        <strong style="color:var(--ink);font-size:0.8rem;">Netlify (recomendado — gratis)</strong><br>
+        1. Descomprimí el ZIP descargado → vas a ver una carpeta <code style="background:var(--cream);padding:0.1rem 0.4rem;border-radius:2px;">lectio/</code><br>
+        2. Entrá a <strong>netlify.com</strong> → Sites → drag &amp; drop la carpeta <code style="background:var(--cream);padding:0.1rem 0.4rem;border-radius:2px;">lectio/</code><br>
+        3. Netlify detecta el <code style="background:var(--cream);padding:0.1rem 0.4rem;border-radius:2px;">netlify.toml</code> automáticamente y despliega la función<br>
+        4. Abrí la URL que te da Netlify → ya funciona sin CORS<br><br>
+        <strong style="color:var(--ink);font-size:0.8rem;">GitHub Pages (alternativa)</strong><br>
+        GitHub Pages no soporta funciones serverless, así que para esa opción necesitás un proxy separado.<br>
+        <strong>Netlify es la opción más simple.</strong>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <span class="footer-note">Lectio · tu API Key nunca queda guardada en el servidor</span>
+  <span class="footer-note">Compatible con Kindle · Kobo · Apple Books · Calibre</span>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// Detect if running locally (file://) and show warning
+if (location.protocol === 'file:') {
+  document.getElementById('localWarning').style.display = 'block';
+}
+
+// The proxy URL — works on Netlify, localhost with netlify dev, or any server
+const PROXY_URL = '/.netlify/functions/claude-proxy';
+
+let pdfFile = null;
+let pdfDoc  = null;
+let epubBlob = null;
+
+window.addEventListener('load', () => {
+  const saved = localStorage.getItem('lectio_apikey');
+  if (saved) {
+    document.getElementById('apiKey').value = saved;
+    showStatus('ok', '✓ Clave cargada desde almacenamiento local');
+  }
+  checkReady();
+});
+
+function saveKey() {
+  const k = document.getElementById('apiKey').value.trim();
+  if (!k.startsWith('sk-ant')) {
+    showStatus('err', '✗ La clave debe comenzar con sk-ant…');
+    return;
+  }
+  localStorage.setItem('lectio_apikey', k);
+  showStatus('ok', '✓ Clave guardada en tu navegador');
+  checkReady();
+}
+
+function clearKey() {
+  localStorage.removeItem('lectio_apikey');
+  document.getElementById('apiKey').value = '';
+  showStatus('err', '✗ Clave eliminada');
+  checkReady();
+}
+
+function showStatus(type, msg) {
+  const el = document.getElementById('apiStatus');
+  el.className = 'api-status ' + type;
+  el.textContent = msg;
+}
+
+function toggleInfo(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+const dropzone = document.getElementById('dropzone');
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type === 'application/pdf') loadFile(f);
+});
+
+function onFileChange(e) { const f = e.target.files[0]; if (f) loadFile(f); }
+
+async function loadFile(f) {
+  pdfFile = f;
+  const ab = await f.arrayBuffer();
+  pdfDoc = await pdfjsLib.getDocument({ data: ab }).promise;
+  const pages = pdfDoc.numPages;
+  document.getElementById('fileName').textContent = f.name;
+  document.getElementById('filePages').textContent = `${pages} págs · ${(f.size/1024/1024).toFixed(1)} MB`;
+  document.getElementById('fileChosen').classList.add('show');
+  checkReady();
+}
+
+function clearFile() {
+  pdfFile = null; pdfDoc = null;
+  document.getElementById('pdfInput').value = '';
+  document.getElementById('fileChosen').classList.remove('show');
+  checkReady();
+}
+
+function checkReady() {
+  const key = document.getElementById('apiKey').value.trim();
+  document.getElementById('btnConvert').disabled = !(key && pdfFile);
+}
+
+const PROMPTS = {
+  standard: `Analizá esta página de un libro y extraé su contenido de texto.
+Devolvé SOLO JSON (sin texto adicional, sin markdown) con esta estructura exacta:
+{
+  "type": "cover|toc|dedication|content|blank",
+  "heading": "texto del encabezado principal si existe, sino null",
+  "heading_level": 1,
+  "paragraphs": ["párrafo 1", "párrafo 2"],
+  "footnotes": [],
+  "subheadings": [],
+  "blockquotes": [],
+  "is_chapter_start": false
+}
+Reglas: preservá saltos de párrafo reales, ignorá encabezados/pies de página repetitivos. Si la página está en blanco, devolvé type: "blank".`,
+
+  exhaustive: `Analizá esta página de un libro como experto tipógrafo. Extraé el contenido preservando la jerarquía visual exacta.
+Devolvé SOLO JSON (sin texto adicional, sin markdown) con esta estructura exacta:
+{
+  "type": "cover|toc|dedication|content|blank",
+  "heading": "texto o null",
+  "heading_level": 1,
+  "subheadings": [{"text":"...", "level":2}],
+  "paragraphs": ["párrafo con <em>cursivas</em> y <strong>negritas</strong>"],
+  "blockquotes": ["citas en bloque"],
+  "footnotes": ["nota 1"],
+  "is_chapter_start": false
+}
+Detectá cursivas y negritas visualmente y marcalas con tags HTML. Separé notas al pie del cuerpo. Si la página está en blanco, devolvé type: "blank".`,
+
+  academic: `Sos un experto en edición académica y tipografía. Analizá esta página con máxima precisión.
+Devolvé SOLO JSON (sin texto adicional, sin markdown) con esta estructura exacta:
+{
+  "type": "cover|toc|dedication|epigraph|content|appendix|bibliography|blank",
+  "heading": "texto exacto o null",
+  "heading_level": 1,
+  "subheadings": [{"text":"...", "level":2}],
+  "paragraphs": ["párrafo HTML con <em>, <strong>, <sup>N</sup>"],
+  "blockquotes": ["cita textual completa"],
+  "footnotes": ["[N] texto completo de la nota"],
+  "page_number": null,
+  "is_chapter_start": false,
+  "notes": ""
+}
+Preservá números de nota al pie como superíndices <sup>. Mantené acentos y puntuación exactos. Si la página está en blanco, devolvé type: "blank".`
+};
+
+function log(msg, cls='') {
+  const el = document.getElementById('progressLog');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  const ts = new Date().toLocaleTimeString('es', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  line.textContent = `[${ts}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function setProgress(pct, label) {
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('progressText').textContent = label;
+}
+
+async function renderPage(page, scale=2) {
+  const vp = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = vp.width; canvas.height = vp.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+  return canvas.toDataURL('image/jpeg', 0.88).split(',')[1];
+}
+
+async function analyzePageWithClaude(b64, prompt, apiKey) {
+  const res = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      apiKey,
+      model: 'claude-opus-4-5',
+      max_tokens: 2048,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b64 } },
+          { type: 'text', text: prompt }
+        ]
+      }]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+
+  const raw = data.content[0].text.trim();
+  const cleaned = raw.replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
+  return JSON.parse(cleaned);
+}
+
+function buildEPUB(pages, meta) {
+  const title     = meta.title     || 'Sin título';
+  const author    = meta.author    || 'Desconocido';
+  const lang      = meta.lang      || 'es';
+  const publisher = meta.publisher || '';
+  const uid       = 'lectio-' + Date.now();
+
+  let bodyHtml = '';
+  let chapterIdx = 0;
+  let openSection = false;
+
+  for (const pg of pages) {
+    if (!pg || pg.type === 'blank') continue;
+
+    if (pg.type === 'cover') {
+      bodyHtml += `<section epub:type="cover" class="page-cover">`;
+      if (pg.heading) bodyHtml += `<h1 class="cover-title">${esc(pg.heading)}</h1>`;
+      for (const p of (pg.paragraphs||[])) bodyHtml += `<p>${p}</p>`;
+      bodyHtml += `</section>\n`;
+      continue;
+    }
+    if (pg.type === 'toc') {
+      bodyHtml += `<section epub:type="toc" class="page-toc">`;
+      if (pg.heading) bodyHtml += `<h2>${esc(pg.heading)}</h2>`;
+      for (const p of (pg.paragraphs||[])) bodyHtml += `<p>${p}</p>`;
+      bodyHtml += `</section>\n`;
+      continue;
+    }
+    if (pg.type === 'dedication' || pg.type === 'epigraph') {
+      bodyHtml += `<section epub:type="${pg.type}" class="page-${pg.type}">`;
+      for (const p of (pg.paragraphs||[])) bodyHtml += `<p class="dedica">${p}</p>`;
+      bodyHtml += `</section>\n`;
+      continue;
+    }
+
+    if (pg.is_chapter_start && pg.heading && pg.heading_level === 1) {
+      if (openSection) { bodyHtml += `</section>\n`; openSection = false; }
+      chapterIdx++;
+      bodyHtml += `<section epub:type="chapter" class="chapter" id="ch${chapterIdx}">\n`;
+      bodyHtml += `<h1>${esc(pg.heading)}</h1>\n`;
+      openSection = true;
+    } else if (pg.heading && pg.heading_level === 1 && !openSection) {
+      chapterIdx++;
+      bodyHtml += `<section epub:type="chapter" class="chapter" id="ch${chapterIdx}">\n`;
+      bodyHtml += `<h1>${esc(pg.heading)}</h1>\n`;
+      openSection = true;
+    } else if (pg.heading) {
+      const tag = 'h' + (pg.heading_level || 2);
+      bodyHtml += `<${tag}>${esc(pg.heading)}</${tag}>\n`;
+    }
+
+    for (const sh of (pg.subheadings||[])) {
+      const tag = 'h' + (sh.level||2);
+      bodyHtml += `<${tag}>${esc(sh.text)}</${tag}>\n`;
+    }
+    for (const p of (pg.paragraphs||[])) bodyHtml += `<p>${p}</p>\n`;
+    for (const bq of (pg.blockquotes||[])) bodyHtml += `<blockquote><p>${esc(bq)}</p></blockquote>\n`;
+
+    if ((pg.footnotes||[]).length) {
+      bodyHtml += `<aside epub:type="footnote" class="footnotes">\n`;
+      for (const fn of pg.footnotes) bodyHtml += `<p class="fn">${fn}</p>\n`;
+      bodyHtml += `</aside>\n`;
+    }
+  }
+  if (openSection) bodyHtml += `</section>\n`;
+
+  const xhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="${lang}" xml:lang="${lang}">
+<head><meta charset="UTF-8"/><title>${esc(title)}</title>
+<style>
+  body{font-family:Georgia,serif;line-height:1.7;margin:5%;color:#222;}
+  h1{font-size:1.8em;margin:1.5em 0 0.8em;page-break-before:always;}
+  h2{font-size:1.3em;margin:1.2em 0 0.5em;}
+  h3{font-size:1.1em;margin:1em 0 0.4em;}
+  p{margin:0 0 0.8em;text-align:justify;}
+  blockquote{margin:1em 2em;font-style:italic;border-left:3px solid #ccc;padding-left:1em;}
+  .dedica{text-align:center;font-style:italic;margin:2em auto;}
+  .footnotes{font-size:.82em;color:#555;margin-top:2em;border-top:1px solid #ddd;padding-top:.8em;}
+  .fn{margin:.3em 0;}
+  .cover-title{text-align:center;font-size:2em;margin-top:30%;}
+  .page-cover{text-align:center;}
+</style>
+</head><body>\n${bodyHtml}</body></html>`;
+
+  const opf = `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="uid">${uid}</dc:identifier>
+    <dc:title>${esc(title)}</dc:title>
+    <dc:creator>${esc(author)}</dc:creator>
+    <dc:language>${lang}</dc:language>
+    ${publisher?`<dc:publisher>${esc(publisher)}</dc:publisher>`:''}
+    <meta property="dcterms:modified">${new Date().toISOString().split('.')[0]}Z</meta>
+  </metadata>
+  <manifest>
+    <item id="content" href="content.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+  </manifest>
+  <spine toc="ncx"><itemref idref="content"/></spine>
+</package>`;
+
+  const ncx = `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head><meta name="dtb:uid" content="${uid}"/></head>
+  <docTitle><text>${esc(title)}</text></docTitle>
+  <navMap><navPoint id="np1" playOrder="1"><navLabel><text>${esc(title)}</text></navLabel><content src="content.xhtml"/></navPoint></navMap>
+</ncx>`;
+
+  const container = `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
+</container>`;
+
+  const zip = new TinyZip();
+  zip.addFile('mimetype', 'application/epub+zip');
+  zip.addFile('META-INF/container.xml', container);
+  zip.addFile('OEBPS/content.opf', opf);
+  zip.addFile('OEBPS/toc.ncx', ncx);
+  zip.addFile('OEBPS/content.xhtml', xhtml);
+  return new Blob([zip.generate()], { type: 'application/epub+zip' });
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+class TinyZip {
+  constructor() { this.files = []; }
+  addFile(name, content) {
+    const enc = new TextEncoder();
+    const data = typeof content === 'string' ? enc.encode(content) : content;
+    this.files.push({ name, data });
+  }
+  generate() {
+    const enc = new TextEncoder();
+    const entries = [];
+    let offset = 0;
+    for (const f of this.files) {
+      const nameBytes = enc.encode(f.name);
+      const crc = crc32(f.data);
+      const lh = new Uint8Array(30 + nameBytes.length);
+      const v = new DataView(lh.buffer);
+      v.setUint32(0,0x04034b50,true); v.setUint16(4,20,true); v.setUint16(6,0,true);
+      v.setUint16(8,0,true); v.setUint16(10,0,true); v.setUint16(12,0,true);
+      v.setUint32(14,crc,true); v.setUint32(18,f.data.length,true);
+      v.setUint32(22,f.data.length,true); v.setUint16(26,nameBytes.length,true);
+      v.setUint16(28,0,true); lh.set(nameBytes,30);
+      entries.push({nameBytes,data:f.data,crc,offset,lh});
+      offset += lh.length + f.data.length;
+    }
+    const cds = [];
+    for (const e of entries) {
+      const cd = new Uint8Array(46+e.nameBytes.length);
+      const v = new DataView(cd.buffer);
+      v.setUint32(0,0x02014b50,true); v.setUint16(4,20,true); v.setUint16(6,20,true);
+      v.setUint16(8,0,true); v.setUint16(10,0,true); v.setUint16(12,0,true);
+      v.setUint16(14,0,true); v.setUint32(16,e.crc,true); v.setUint32(20,e.data.length,true);
+      v.setUint32(24,e.data.length,true); v.setUint16(28,e.nameBytes.length,true);
+      v.setUint16(30,0,true); v.setUint16(32,0,true); v.setUint16(34,0,true);
+      v.setUint16(36,0,true); v.setUint32(38,0,true); v.setUint32(42,e.offset,true);
+      cd.set(e.nameBytes,46); cds.push(cd);
+    }
+    const cdSize = cds.reduce((s,r)=>s+r.length,0);
+    const eocd = new Uint8Array(22);
+    const ve = new DataView(eocd.buffer);
+    ve.setUint32(0,0x06054b50,true); ve.setUint16(4,0,true); ve.setUint16(6,0,true);
+    ve.setUint16(8,entries.length,true); ve.setUint16(10,entries.length,true);
+    ve.setUint32(12,cdSize,true); ve.setUint32(16,offset,true); ve.setUint16(20,0,true);
+    const parts = [];
+    for (const e of entries) { parts.push(e.lh); parts.push(e.data); }
+    for (const cd of cds) parts.push(cd);
+    parts.push(eocd);
+    const total = parts.reduce((s,p)=>s+p.length,0);
+    const out = new Uint8Array(total); let pos=0;
+    for (const p of parts) { out.set(p,pos); pos+=p.length; }
+    return out.buffer;
+  }
+}
+
+function crc32(buf) {
+  let c = 0xFFFFFFFF;
+  for (let i=0;i<buf.length;i++) { c^=buf[i]; for(let k=0;k<8;k++) c=(c>>>1)^(c&1?0xEDB88320:0); }
+  return (c^0xFFFFFFFF)>>>0;
+}
+
+async function startConversion() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey || !pdfDoc) return;
+
+  const level  = document.querySelector('input[name=ocr]:checked').value;
+  const prompt = PROMPTS[level];
+  const total  = pdfDoc.numPages;
+
+  document.getElementById('btnConvert').disabled = true;
+  document.getElementById('progress-section').classList.add('show');
+  document.getElementById('result-section').classList.remove('show');
+  document.getElementById('progressLog').innerHTML = '';
+
+  log(`Iniciando conversión — ${total} páginas · nivel ${level}`, 'log-info');
+
+  const pages = [];
+  const BATCH = level === 'academic' ? 1 : 2;
+
+  for (let i = 0; i < total; i += BATCH) {
+    const batch = [];
+    for (let j = i; j < Math.min(i+BATCH, total); j++) batch.push(j+1);
+    setProgress(Math.round((i/total)*90), `Página ${batch[0]} de ${total}…`);
+    log(`Analizando página${batch.length>1?'s':''} ${batch.join(', ')}…`);
+
+    const results = await Promise.all(batch.map(async (pageNum) => {
+      const page = await pdfDoc.getPage(pageNum);
+      const b64  = await renderPage(page);
+      try {
+        const result = await analyzePageWithClaude(b64, prompt, apiKey);
+        log(`  ✓ Página ${pageNum} — tipo: ${result.type||'?'}`, 'log-ok');
+        return result;
+      } catch(e) {
+        log(`  ✗ Página ${pageNum}: ${e.message}`, 'log-err');
+        return { type:'content', paragraphs:[`[Error en página ${pageNum}: ${e.message}]`],
+          heading:null, heading_level:null, subheadings:[], blockquotes:[], footnotes:[], is_chapter_start:false };
+      }
+    }));
+
+    pages.push(...results);
+    if (i+BATCH < total) await sleep(level==='academic'?1200:600);
+  }
+
+  setProgress(92, 'Construyendo EPUB…');
+  log('Ensamblando estructura EPUB…', 'log-info');
+
+  const meta = {
+    title:     document.getElementById('metaTitle').value.trim()     || pdfFile.name.replace(/\.pdf$/i,''),
+    author:    document.getElementById('metaAuthor').value.trim(),
+    lang:      document.getElementById('metaLang').value.trim()      || 'es',
+    publisher: document.getElementById('metaPublisher').value.trim()
+  };
+
+  try {
+    epubBlob = buildEPUB(pages, meta);
+    setProgress(100, 'Completado');
+    log(`EPUB generado: ${(epubBlob.size/1024).toFixed(0)} KB`, 'log-ok');
+
+    const url      = URL.createObjectURL(epubBlob);
+    const filename = (meta.title||'lectio').replace(/[^a-z0-9áéíóúñ ]/gi,'_')+'.epub';
+    document.getElementById('downloadLink').href     = url;
+    document.getElementById('downloadLink').download = filename;
+    document.getElementById('resultSub').textContent = `${pages.length} páginas procesadas · ${(epubBlob.size/1024).toFixed(0)} KB`;
+    document.getElementById('result-section').classList.add('show');
+    document.getElementById('downloadLink').click();
+  } catch(e) {
+    log('✗ Error al generar EPUB: '+e.message, 'log-err');
+    setProgress(0,'Error');
+  }
+
+  document.getElementById('btnConvert').disabled = false;
+}
+
+function sleep(ms) { return new Promise(r=>setTimeout(r,ms)); }
+
+function resetAll() {
+  clearFile();
+  document.getElementById('progress-section').classList.remove('show');
+  document.getElementById('result-section').classList.remove('show');
+  document.getElementById('progressLog').innerHTML = '';
+  setProgress(0,'Iniciando…');
+  if (epubBlob) { URL.revokeObjectURL(document.getElementById('downloadLink').href); epubBlob=null; }
+}
+</script>
+</body>
+</html>
