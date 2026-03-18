@@ -261,9 +261,13 @@
         <span id="progressPct">0%</span>
       </div>
       <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+      <button class="btn-sm" id="btnStop" onclick="stopConversion()" style="margin-top:0.8rem;">
+  ✕ Detener conversión
+</button>
       <div class="progress-log" id="progressLog"></div>
     </div>
   </div>
+  
 
   <!-- Result -->
   <div id="result-section">
@@ -298,6 +302,7 @@ if (location.protocol === 'file:') {
 // The proxy URL — works on Netlify, localhost with netlify dev, or any server
 const PROXY_URL = '/.netlify/functions/claude-proxy';
 
+let stopRequested = false;
 let pdfFile = null;
 let pdfDoc  = null;
 let epubBlob = null;
@@ -442,24 +447,41 @@ async function renderPage(page, scale=2) {
   return canvas.toDataURL('image/jpeg', 0.88).split(',')[1];
 }
 
-async function analyzePageWithClaude(b64, prompt) {
-  const res = await fetch(PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageBase64: b64, prompt })
-  });
+async function analyzePageWithClaude(b64, prompt, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(PROXY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: b64, prompt })
+      });
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `HTTP ${res.status}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+
+      const parts = data.candidates?.[0]?.content?.parts;
+      if (!parts || !parts[0]?.text) throw new Error('Respuesta vacía de Gemini');
+
+      const raw = parts[0].text.trim();
+      if (!raw) throw new Error('Texto vacío en respuesta');
+
+      const cleaned = raw.replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
+      return JSON.parse(cleaned);
+
+    } catch (e) {
+      if (attempt < retries) {
+        log(`  ↻ Página reintentando (intento ${attempt}/${retries}): ${e.message}`, 'log-info');
+        await sleep(15000); // espera 15s antes de reintentar
+      } else {
+        throw e;
+      }
+    }
   }
-
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-
-  const raw = data.candidates[0].content.parts[0].text.trim();
-  const cleaned = raw.replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
-  return JSON.parse(cleaned);
 }
 
 function buildEPUB(pages, meta) {
@@ -650,7 +672,12 @@ function crc32(buf) {
 }
 
 async function startConversion() {
-if (!pdfDoc) return;
+  if (!pdfDoc) return;
+
+  // ← NUEVO: resetear flag de stop
+  stopRequested = false;
+  document.getElementById('btnStop').disabled = false;
+
   const level  = document.querySelector('input[name=ocr]:checked').value;
   const prompt = PROMPTS[level];
   const total  = pdfDoc.numPages;
@@ -663,13 +690,16 @@ if (!pdfDoc) return;
   log(`Iniciando conversión — ${total} páginas · nivel ${level}`, 'log-info');
 
   const pages = [];
-const BATCH = 1;
+  const BATCH = 1;
 
   for (let i = 0; i < total; i += BATCH) {
+    // ← NUEVO: chequear stop al inicio de cada página
+    if (stopRequested) break;
+
     const batch = [];
     for (let j = i; j < Math.min(i+BATCH, total); j++) batch.push(j+1);
     setProgress(Math.round((i/total)*90), `Página ${batch[0]} de ${total}…`);
-    log(`Analizando página${batch.length>1?'s':''} ${batch.join(', ')}…`);
+    log(`Analizando página ${batch.join(', ')}…`);
 
     const results = await Promise.all(batch.map(async (pageNum) => {
       const page = await pdfDoc.getPage(pageNum);
@@ -716,6 +746,8 @@ const BATCH = 1;
     setProgress(0,'Error');
   }
 
+  // ← NUEVO: deshabilitar botón stop al terminar
+  document.getElementById('btnStop').disabled = true;
   document.getElementById('btnConvert').disabled = false;
 }
 
