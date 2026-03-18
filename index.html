@@ -166,7 +166,7 @@
 
 <header>
   <div class="logo">L<span>e</span>ctio</div>
-  <div class="tagline">PDF → EPUB · Motor Claude Vision</div>
+  <div class="tagline">PDF → EPUB · Motor Google Cloud Vision</div>
 </header>
 
 <main>
@@ -176,25 +176,9 @@
     ⚠ Estás abriendo este archivo <strong>localmente</strong>. Para que funcione, subí la carpeta completa a <strong>Netlify</strong> (drag &amp; drop). Ver instrucciones abajo.
   </div>
 
-  <!-- API Key -->
-  <div class="section-label">01 — Clave de API</div>
-  <div class="card">
-    <div class="api-row">
-      <input class="api-input" type="password" id="apiKey" placeholder="sk-ant-api03-..." autocomplete="off">
-      <button class="btn-sm" onclick="saveKey()">Guardar</button>
-      <button class="btn-sm" onclick="clearKey()">Borrar</button>
-    </div>
-    <div id="apiStatus" class="api-status"></div>
-    <button class="info-toggle" onclick="toggleInfo('infoApi')">▸ ¿Dónde obtengo mi API Key?</button>
-    <div id="infoApi" class="info-panel">
-      Tu API Key de Anthropic se obtiene en <strong>console.anthropic.com</strong>.
-      Se guarda solo en el almacenamiento local de tu navegador y nunca queda almacenada en el servidor.
-      Cada conversión consume tokens de tu cuenta.
-    </div>
-  </div>
 
   <!-- PDF Upload -->
-  <div class="section-label">02 — Archivo PDF</div>
+  <div class="section-label">01 — Archivo PDF</div>
   <div class="card">
     <div class="dropzone" id="dropzone">
       <input type="file" id="pdfInput" accept=".pdf" onchange="onFileChange(event)">
@@ -211,7 +195,7 @@
   </div>
 
   <!-- OCR Level -->
-  <div class="section-label">03 — Nivel de OCR</div>
+  <div class="section-label">02 — Nivel de OCR</div>
   <div class="card">
     <div class="ocr-options">
       <label class="ocr-option">
@@ -242,7 +226,7 @@
   </div>
 
   <!-- Metadata -->
-  <div class="section-label">04 — Metadatos del libro (opcional)</div>
+  <div class="section-label">03 — Metadatos del libro (opcional)</div>
   <div class="card">
     <div class="meta-grid">
       <div class="field-group">
@@ -294,27 +278,10 @@
     </div>
   </div>
 
-  <!-- Deploy instructions -->
-  <div style="margin-top:3rem;">
-    <div class="section-label">Instrucciones de deploy</div>
-    <div class="card">
-      <div style="font-family:'DM Mono',monospace;font-size:0.75rem;color:var(--muted);line-height:2;">
-        <strong style="color:var(--ink);font-size:0.8rem;">Netlify (recomendado — gratis)</strong><br>
-        1. Descomprimí el ZIP descargado → vas a ver una carpeta <code style="background:var(--cream);padding:0.1rem 0.4rem;border-radius:2px;">lectio/</code><br>
-        2. Entrá a <strong>netlify.com</strong> → Sites → drag &amp; drop la carpeta <code style="background:var(--cream);padding:0.1rem 0.4rem;border-radius:2px;">lectio/</code><br>
-        3. Netlify detecta el <code style="background:var(--cream);padding:0.1rem 0.4rem;border-radius:2px;">netlify.toml</code> automáticamente y despliega la función<br>
-        4. Abrí la URL que te da Netlify → ya funciona sin CORS<br><br>
-        <strong style="color:var(--ink);font-size:0.8rem;">GitHub Pages (alternativa)</strong><br>
-        GitHub Pages no soporta funciones serverless, así que para esa opción necesitás un proxy separado.<br>
-        <strong>Netlify es la opción más simple.</strong>
-      </div>
-    </div>
-  </div>
-
 </main>
 
 <footer>
-  <span class="footer-note">Lectio · tu API Key nunca queda guardada en el servidor</span>
+  <span class="footer-note">Lectio</span>
   <span class="footer-note">Compatible con Kindle · Kobo · Apple Books · Calibre</span>
 </footer>
 
