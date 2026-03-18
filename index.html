@@ -696,7 +696,7 @@ if (!pdfDoc) return;
   log(`Iniciando conversión — ${total} páginas · nivel ${level}`, 'log-info');
 
   const pages = [];
-  const BATCH = level === 'academic' ? 1 : 2;
+const BATCH = 1;
 
   for (let i = 0; i < total; i += BATCH) {
     const batch = [];
@@ -719,7 +719,7 @@ if (!pdfDoc) return;
     }));
 
     pages.push(...results);
-    if (i+BATCH < total) await sleep(level==='academic'?1200:600);
+    if (i+BATCH < total) await sleep(13000);
   }
 
   setProgress(92, 'Construyendo EPUB…');
