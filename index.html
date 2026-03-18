@@ -377,113 +377,133 @@ function checkReady() {
   document.getElementById('btnConvert').disabled = !pdfFile;
 }
 
-const PROMPTS = {
-  standard: `Analizá esta página de un libro y extraé su contenido de texto.
-Devolvé SOLO JSON (sin texto adicional, sin markdown) con esta estructura exacta:
-{
-  "type": "cover|toc|dedication|content|blank",
-  "heading": "texto del encabezado principal si existe, sino null",
-  "heading_level": 1,
-  "paragraphs": ["párrafo 1", "párrafo 2"],
-  "footnotes": [],
-  "subheadings": [],
-  "blockquotes": [],
-  "is_chapter_start": false
-}
-Reglas: preservá saltos de párrafo reales, ignorá encabezados/pies de página repetitivos. Si la página está en blanco, devolvé type: "blank".`,
+// ─── Extracción de texto directa desde PDF (sin API) ─────────────────────────
+async function extractPageText(page) {
+  const textContent = await page.getTextContent();
+  const items = textContent.items;
+  if (!items.length) return null; // página sin texto = probablemente scan
 
-  exhaustive: `Analizá esta página de un libro como experto tipógrafo. Extraé el contenido preservando la jerarquía visual exacta.
-Devolvé SOLO JSON (sin texto adicional, sin markdown) con esta estructura exacta:
-{
-  "type": "cover|toc|dedication|content|blank",
-  "heading": "texto o null",
-  "heading_level": 1,
-  "subheadings": [{"text":"...", "level":2}],
-  "paragraphs": ["párrafo con <em>cursivas</em> y <strong>negritas</strong>"],
-  "blockquotes": ["citas en bloque"],
-  "footnotes": ["nota 1"],
-  "is_chapter_start": false
-}
-Detectá cursivas y negritas visualmente y marcalas con tags HTML. Separé notas al pie del cuerpo. Si la página está en blanco, devolvé type: "blank".`,
+  // Agrupar items en líneas por posición Y
+  const lines = [];
+  let currentLine = null;
+  const Y_THRESHOLD = 3; // tolerancia en puntos para considerar misma línea
 
-  academic: `Sos un experto en edición académica y tipografía. Analizá esta página con máxima precisión.
-Devolvé SOLO JSON (sin texto adicional, sin markdown) con esta estructura exacta:
-{
-  "type": "cover|toc|dedication|epigraph|content|appendix|bibliography|blank",
-  "heading": "texto exacto o null",
-  "heading_level": 1,
-  "subheadings": [{"text":"...", "level":2}],
-  "paragraphs": ["párrafo HTML con <em>, <strong>, <sup>N</sup>"],
-  "blockquotes": ["cita textual completa"],
-  "footnotes": ["[N] texto completo de la nota"],
-  "page_number": null,
-  "is_chapter_start": false,
-  "notes": ""
-}
-Preservá números de nota al pie como superíndices <sup>. Mantené acentos y puntuación exactos. Si la página está en blanco, devolvé type: "blank".`
-};
+  for (const item of items) {
+    const y = Math.round(item.transform[5]);
+    const text = item.str;
+    if (!text.trim()) continue;
 
-function log(msg, cls='') {
-  const el = document.getElementById('progressLog');
-  const line = document.createElement('div');
-  if (cls) line.className = cls;
-  const ts = new Date().toLocaleTimeString('es', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  line.textContent = `[${ts}] ${msg}`;
-  el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
-}
-
-function setProgress(pct, label) {
-  document.getElementById('progressBar').style.width = pct + '%';
-  document.getElementById('progressPct').textContent = pct + '%';
-  document.getElementById('progressText').textContent = label;
-}
-
-async function renderPage(page, scale=2) {
-  const vp = page.getViewport({ scale });
-  const canvas = document.createElement('canvas');
-  canvas.width = vp.width; canvas.height = vp.height;
-  await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-  return canvas.toDataURL('image/jpeg', 0.88).split(',')[1];
-}
-
-async function analyzePageWithClaude(b64, prompt, retries = 3) {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      const res = await fetch(PROXY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: b64, prompt })
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || `HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-
-      const parts = data.candidates?.[0]?.content?.parts;
-      if (!parts || !parts[0]?.text) throw new Error('Respuesta vacía de Gemini');
-
-      const raw = parts[0].text.trim();
-      if (!raw) throw new Error('Texto vacío en respuesta');
-
-      const cleaned = raw.replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
-      return JSON.parse(cleaned);
-
-    } catch (e) {
-      if (attempt < retries) {
-        log(`  ↻ Página reintentando (intento ${attempt}/${retries}): ${e.message}`, 'log-info');
-        await sleep(15000); // espera 15s antes de reintentar
-      } else {
-        throw e;
-      }
+    if (!currentLine || Math.abs(currentLine.y - y) > Y_THRESHOLD) {
+      currentLine = { y, text: text, fontSize: item.height, x: item.transform[4] };
+      lines.push(currentLine);
+    } else {
+      currentLine.text += text;
     }
   }
+
+  return lines;
 }
 
+function analyzeLines(lines, pageNum) {
+  if (!lines || !lines.length) return {
+    type: 'blank', heading: null, heading_level: null,
+    subheadings: [], paragraphs: [], blockquotes: [], footnotes: [], is_chapter_start: false
+  };
+
+  // Calcular fontSize promedio para detectar títulos
+  const fontSizes = lines.map(l => l.fontSize).filter(s => s > 0);
+  const avgFontSize = fontSizes.reduce((a, b) => a + b, 0) / fontSizes.length;
+  const maxFontSize = Math.max(...fontSizes);
+
+  // Detectar altura de página para separar notas al pie (último 15%)
+  const ys = lines.map(l => l.y);
+  const pageTop = Math.max(...ys);
+  const pageBottom = Math.min(...ys);
+  const pageHeight = pageTop - pageBottom;
+  const footnoteZone = pageBottom + pageHeight * 0.15;
+
+  let heading = null;
+  let heading_level = null;
+  let is_chapter_start = false;
+  const paragraphLines = [];
+  const footnoteLines = [];
+  const subheadings = [];
+
+  for (const line of lines) {
+    const text = line.text.trim();
+    if (!text) continue;
+
+    const isLargeFont = line.fontSize > avgFontSize * 1.3;
+    const isMediumFont = line.fontSize > avgFontSize * 1.1;
+    const isShortLine = text.length < 60;
+    const isInFootnoteZone = line.y < footnoteZone;
+    const looksLikeFootnote = /^[\d\*†‡]\s/.test(text) || /^\[\d+\]/.test(text);
+
+    if (isInFootnoteZone && looksLikeFootnote) {
+      footnoteLines.push(text);
+    } else if (isLargeFont && isShortLine) {
+      if (!heading) {
+        heading = text;
+        heading_level = 1;
+        is_chapter_start = true;
+      } else {
+        subheadings.push({ text, level: 2 });
+      }
+    } else if (isMediumFont && isShortLine && !heading) {
+      heading = text;
+      heading_level = 2;
+    } else {
+      paragraphLines.push(text);
+    }
+  }
+
+  // Agrupar líneas de párrafo en párrafos reales
+  // Una línea corta que termina en punto puede ser fin de párrafo
+  const paragraphs = [];
+  let current = '';
+  for (const line of paragraphLines) {
+    if (!current) {
+      current = line;
+    } else if (line.length < 40 && /[.!?]$/.test(current)) {
+      current += ' ' + line;
+      paragraphs.push(current.trim());
+      current = '';
+    } else {
+      current += ' ' + line;
+    }
+  }
+  if (current) paragraphs.push(current.trim());
+
+  // Detectar tipo de página
+  let type = 'content';
+  if (!paragraphs.length && !heading) type = 'blank';
+  else if (pageNum <= 3 && heading && paragraphs.length < 3) type = 'cover';
+  else if (heading && /índice|contenido|table of contents/i.test(heading)) type = 'toc';
+  else if (paragraphs.length < 4 && !heading && pageNum < 10) type = 'dedication';
+
+  return {
+    type, heading, heading_level, is_chapter_start,
+    subheadings, paragraphs,
+    blockquotes: [],
+    footnotes: footnoteLines
+  };
+}
+
+async function analyzePage(page, pageNum) {
+  const lines = await extractPageText(page);
+
+  // Si no hay texto, es un scan — fallback a Gemini si está configurado
+  if (!lines) {
+    log(`  ⚠ Página ${pageNum}: sin texto embebido (posible scan)`, 'log-info');
+    return {
+      type: 'content',
+      paragraphs: [`[Página ${pageNum}: scan detectado — convertí con nivel Académico para procesar]`],
+      heading: null, heading_level: null, subheadings: [], blockquotes: [], footnotes: [], is_chapter_start: false
+    };
+  }
+
+  return analyzeLines(lines, pageNum);
+}
 function buildEPUB(pages, meta) {
   const title     = meta.title     || 'Sin título';
   const author    = meta.author    || 'Desconocido';
@@ -674,58 +694,48 @@ function crc32(buf) {
 async function startConversion() {
   if (!pdfDoc) return;
 
-  // ← NUEVO: resetear flag de stop
   stopRequested = false;
   document.getElementById('btnStop').disabled = false;
 
-  const level  = document.querySelector('input[name=ocr]:checked').value;
-  const prompt = PROMPTS[level];
-  const total  = pdfDoc.numPages;
+  const total = pdfDoc.numPages;
 
   document.getElementById('btnConvert').disabled = true;
   document.getElementById('progress-section').classList.add('show');
   document.getElementById('result-section').classList.remove('show');
   document.getElementById('progressLog').innerHTML = '';
 
-  log(`Iniciando conversión — ${total} páginas · nivel ${level}`, 'log-info');
+  log(`Iniciando conversión — ${total} páginas · extracción directa`, 'log-info');
 
   const pages = [];
-  const BATCH = 1;
 
-  for (let i = 0; i < total; i += BATCH) {
-    // ← NUEVO: chequear stop al inicio de cada página
+  for (let i = 0; i < total; i++) {
     if (stopRequested) break;
 
-    const batch = [];
-    for (let j = i; j < Math.min(i+BATCH, total); j++) batch.push(j+1);
-    setProgress(Math.round((i/total)*90), `Página ${batch[0]} de ${total}…`);
-    log(`Analizando página ${batch.join(', ')}…`);
+    const pageNum = i + 1;
+    setProgress(Math.round((i / total) * 90), `Página ${pageNum} de ${total}…`);
+    log(`Procesando página ${pageNum}…`);
 
-    const results = await Promise.all(batch.map(async (pageNum) => {
+    try {
       const page = await pdfDoc.getPage(pageNum);
-      const b64  = await renderPage(page);
-      try {
-        const result = await analyzePageWithClaude(b64, prompt);
-        log(`  ✓ Página ${pageNum} — tipo: ${result.type||'?'}`, 'log-ok');
-        return result;
-      } catch(e) {
-        log(`  ✗ Página ${pageNum}: ${e.message}`, 'log-err');
-        return { type:'content', paragraphs:[`[Error en página ${pageNum}: ${e.message}]`],
-          heading:null, heading_level:null, subheadings:[], blockquotes:[], footnotes:[], is_chapter_start:false };
-      }
-    }));
-
-    pages.push(...results);
-    if (i+BATCH < total) await sleep(13000);
+      const result = await analyzePage(page, pageNum);
+      log(`  ✓ Página ${pageNum} — tipo: ${result.type||'?'}`, 'log-ok');
+      pages.push(result);
+    } catch(e) {
+      log(`  ✗ Página ${pageNum}: ${e.message}`, 'log-err');
+      pages.push({
+        type: 'content', paragraphs: [`[Error en página ${pageNum}: ${e.message}]`],
+        heading: null, heading_level: null, subheadings: [], blockquotes: [], footnotes: [], is_chapter_start: false
+      });
+    }
   }
 
   setProgress(92, 'Construyendo EPUB…');
   log('Ensamblando estructura EPUB…', 'log-info');
 
   const meta = {
-    title:     document.getElementById('metaTitle').value.trim()     || pdfFile.name.replace(/\.pdf$/i,''),
+    title:     document.getElementById('metaTitle').value.trim() || pdfFile.name.replace(/\.pdf$/i,''),
     author:    document.getElementById('metaAuthor').value.trim(),
-    lang:      document.getElementById('metaLang').value.trim()      || 'es',
+    lang:      document.getElementById('metaLang').value.trim() || 'es',
     publisher: document.getElementById('metaPublisher').value.trim()
   };
 
@@ -746,7 +756,6 @@ async function startConversion() {
     setProgress(0,'Error');
   }
 
-  // ← NUEVO: deshabilitar botón stop al terminar
   document.getElementById('btnStop').disabled = true;
   document.getElementById('btnConvert').disabled = false;
 }
