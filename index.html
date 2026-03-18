@@ -194,37 +194,6 @@
     </div>
   </div>
 
-  <!-- OCR Level -->
-  <div class="section-label">02 — Nivel de OCR</div>
-  <div class="card">
-    <div class="ocr-options">
-      <label class="ocr-option">
-        <input type="radio" name="ocr" value="standard">
-        <span class="ocr-label">
-          <span class="ocr-name">Estándar</span>
-          <span class="ocr-desc">Extracción básica, rápido para textos digitales limpios</span>
-          <span class="ocr-badge badge-fast">RÁPIDO</span>
-        </span>
-      </label>
-      <label class="ocr-option">
-        <input type="radio" name="ocr" value="exhaustive" checked>
-        <span class="ocr-label">
-          <span class="ocr-name">Exhaustivo</span>
-          <span class="ocr-desc">Preserva estructura, jerarquías, notas al pie, cursivas</span>
-          <span class="ocr-badge badge-rec">RECOMENDADO</span>
-        </span>
-      </label>
-      <label class="ocr-option">
-        <input type="radio" name="ocr" value="academic">
-        <span class="ocr-label">
-          <span class="ocr-name">Académico</span>
-          <span class="ocr-desc">Máxima precisión. Ideal para Freud, textos filosóficos</span>
-          <span class="ocr-badge badge-slow">MÁS LENTO</span>
-        </span>
-      </label>
-    </div>
-  </div>
-
   <!-- Metadata -->
   <div class="section-label">03 — Metadatos del libro (opcional)</div>
   <div class="card">
@@ -308,37 +277,8 @@ let pdfDoc  = null;
 let epubBlob = null;
 
 window.addEventListener('load', () => {
-  const saved = localStorage.getItem('lectio_apikey');
-  if (saved) {
-    document.getElementById('apiKey').value = saved;
-    showStatus('ok', '✓ Clave cargada desde almacenamiento local');
-  }
   checkReady();
 });
-
-function saveKey() {
-  const k = document.getElementById('apiKey').value.trim();
-  if (!k.startsWith('sk-ant')) {
-    showStatus('err', '✗ La clave debe comenzar con sk-ant…');
-    return;
-  }
-  localStorage.setItem('lectio_apikey', k);
-  showStatus('ok', '✓ Clave guardada en tu navegador');
-  checkReady();
-}
-
-function clearKey() {
-  localStorage.removeItem('lectio_apikey');
-  document.getElementById('apiKey').value = '';
-  showStatus('err', '✗ Clave eliminada');
-  checkReady();
-}
-
-function showStatus(type, msg) {
-  const el = document.getElementById('apiStatus');
-  el.className = 'api-status ' + type;
-  el.textContent = msg;
-}
 
 function toggleInfo(id) {
   document.getElementById(id).classList.toggle('open');
@@ -690,7 +630,13 @@ function crc32(buf) {
   for (let i=0;i<buf.length;i++) { c^=buf[i]; for(let k=0;k<8;k++) c=(c>>>1)^(c&1?0xEDB88320:0); }
   return (c^0xFFFFFFFF)>>>0;
 }
-
+  
+function stopConversion() {
+  stopRequested = true;
+  log('⚠ Conversión detenida por el usuario.', 'log-info');
+  document.getElementById('btnStop').disabled = true;
+}
+  
 async function startConversion() {
   if (!pdfDoc) return;
 
