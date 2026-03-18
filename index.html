@@ -360,7 +360,6 @@ function analyzeLines(lines, pageNum) {
   // Calcular fontSize promedio para detectar títulos
   const fontSizes = lines.map(l => l.fontSize).filter(s => s > 0);
   const avgFontSize = fontSizes.reduce((a, b) => a + b, 0) / fontSizes.length;
-  const maxFontSize = Math.max(...fontSizes);
 
   // Detectar altura de página para separar notas al pie (último 15%)
   const ys = lines.map(l => l.y);
@@ -422,11 +421,11 @@ function analyzeLines(lines, pageNum) {
   if (current) paragraphs.push(current.trim());
 
   // Detectar tipo de página
-  let type = 'content';
-  if (!paragraphs.length && !heading) type = 'blank';
-  else if (pageNum <= 3 && heading && paragraphs.length < 3) type = 'cover';
-  else if (heading && /índice|contenido|table of contents/i.test(heading)) type = 'toc';
-  else if (paragraphs.length < 4 && !heading && pageNum < 10) type = 'dedication';
+let type = 'content';
+if (!paragraphs.length && !heading) type = 'blank';
+else if (pageNum === 1 && paragraphs.length < 3) type = 'cover';
+else if (pageNum === 2 && !heading && paragraphs.length < 4) type = 'dedication';
+else if (heading && /^(índice|contenido|table of contents)$/i.test(heading.trim())) type = 'toc';
 
   return {
     type, heading, heading_level, is_chapter_start,
@@ -468,14 +467,14 @@ function buildEPUB(pages, meta) {
     if (pg.type === 'cover') {
       bodyHtml += `<section epub:type="cover" class="page-cover">`;
       if (pg.heading) bodyHtml += `<h1 class="cover-title">${esc(pg.heading)}</h1>`;
-      for (const p of (pg.paragraphs||[])) bodyHtml += `<p>${p}</p>`;
+      for (const p of (pg.paragraphs||[])) bodyHtml += `<p>${esc(p)}</p>`;
       bodyHtml += `</section>\n`;
       continue;
     }
     if (pg.type === 'toc') {
       bodyHtml += `<section epub:type="toc" class="page-toc">`;
       if (pg.heading) bodyHtml += `<h2>${esc(pg.heading)}</h2>`;
-      for (const p of (pg.paragraphs||[])) bodyHtml += `<p>${p}</p>`;
+      for (const p of (pg.paragraphs||[])) bodyHtml += `<p>${esc(p)}</p>`;
       bodyHtml += `</section>\n`;
       continue;
     }
@@ -506,12 +505,12 @@ function buildEPUB(pages, meta) {
       const tag = 'h' + (sh.level||2);
       bodyHtml += `<${tag}>${esc(sh.text)}</${tag}>\n`;
     }
-    for (const p of (pg.paragraphs||[])) bodyHtml += `<p>${p}</p>\n`;
+    for (const p of (pg.paragraphs||[])) bodyHtml += `<p>${esc(p)}</p>\n`;
     for (const bq of (pg.blockquotes||[])) bodyHtml += `<blockquote><p>${esc(bq)}</p></blockquote>\n`;
 
     if ((pg.footnotes||[]).length) {
       bodyHtml += `<aside epub:type="footnote" class="footnotes">\n`;
-      for (const fn of pg.footnotes) bodyHtml += `<p class="fn">${fn}</p>\n`;
+      for (const fn of pg.footnotes) bodyHtml += `<p class="fn">${esc(fn)}</p>\n`;
       bodyHtml += `</aside>\n`;
     }
   }
@@ -522,17 +521,19 @@ function buildEPUB(pages, meta) {
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="${lang}" xml:lang="${lang}">
 <head><meta charset="UTF-8"/><title>${esc(title)}</title>
 <style>
-  body{font-family:Georgia,serif;line-height:1.7;margin:5%;color:#222;}
-  h1{font-size:1.8em;margin:1.5em 0 0.8em;page-break-before:always;}
-  h2{font-size:1.3em;margin:1.2em 0 0.5em;}
-  h3{font-size:1.1em;margin:1em 0 0.4em;}
-  p{margin:0 0 0.8em;text-align:justify;}
-  blockquote{margin:1em 2em;font-style:italic;border-left:3px solid #ccc;padding-left:1em;}
-  .dedica{text-align:center;font-style:italic;margin:2em auto;}
-  .footnotes{font-size:.82em;color:#555;margin-top:2em;border-top:1px solid #ddd;padding-top:.8em;}
-  .fn{margin:.3em 0;}
-  .cover-title{text-align:center;font-size:2em;margin-top:30%;}
-  .page-cover{text-align:center;}
+  body{font-family:Georgia,serif;line-height:1.8;margin:5% 8%;color:#1a1a1a;}
+h1{font-size:1.6em;margin:2em 0 0.6em;page-break-before:always;font-weight:bold;text-align:left;}
+h2{font-size:1.2em;margin:1.5em 0 0.4em;font-weight:bold;text-align:left;}
+h3{font-size:1.05em;margin:1.2em 0 0.3em;text-align:left;}
+p{margin:0 0 0.7em;text-align:left;text-indent:1.2em;}
+p:first-child{text-indent:0;}
+blockquote{margin:1em 2em;font-style:italic;border-left:3px solid #ccc;padding-left:1em;}
+.dedica{text-align:center;font-style:italic;margin:2em auto;text-indent:0;}
+.footnotes{font-size:.82em;color:#555;margin-top:2em;border-top:1px solid #ddd;padding-top:.8em;}
+.fn{margin:.3em 0;text-indent:0;}
+.cover-title{text-align:left;font-size:2em;margin-top:10%;text-indent:0;}
+.page-cover{text-align:left;}
+.page-dedication{text-align:left;}
 </style>
 </head><body>\n${bodyHtml}</body></html>`;
 
