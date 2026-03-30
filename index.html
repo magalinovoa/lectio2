@@ -334,10 +334,6 @@ async function extractPageText(page) {
     const text = item.str;
     if (!text.trim()) continue;
 
-    // Log temporal para debug
-    if (text.length > 0 && text.length < 10) {
-  console.log('SHORT ITEM:', JSON.stringify(text));
-}
 
     if (!currentLine || Math.abs(currentLine.y - y) > Y_THRESHOLD) {
       currentLine = { y, text: text, fontSize: item.height, x: item.transform[4] };
