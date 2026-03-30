@@ -535,6 +535,9 @@ Separé las notas al pie del cuerpo del texto. Si la página está en blanco dev
 
     const raw = parts[0].text.trim();
     const cleaned = raw.replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
+    const parsed = JSON.parse(cleaned);
+      parsed._usedVision = true; // marcar que usó Vision
+      return parsed;
     return JSON.parse(cleaned);
 
   } catch(e) {
@@ -785,11 +788,13 @@ async function startConversion() {
     setProgress(Math.round((i / total) * 90), `Página ${pageNum} de ${total}…`);
     log(`Procesando página ${pageNum}…`);
 
-    try {
+   try {
       const page = await pdfDoc.getPage(pageNum);
       const result = await analyzePage(page, pageNum);
       log(`  ✓ Página ${pageNum} — tipo: ${result.type||'?'}`, 'log-ok');
       pages.push(result);
+      // Si usó Gemini Vision, esperar para no exceder rate limit
+      if (result._usedVision) await sleep(13000);
     } catch(e) {
       log(`  ✗ Página ${pageNum}: ${e.message}`, 'log-err');
       pages.push({
