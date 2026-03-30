@@ -166,7 +166,7 @@
 
 <header>
   <div class="logo">L<span>e</span>ctio</div>
-  <div class="tagline">PDF → EPUB · Motor Google Cloud Vision | 4.3 00.01</div>
+  <div class="tagline">PDF → EPUB · Motor Google Cloud Vision | 4.3 00.09</div>
 </header>
 
 <main>
@@ -498,6 +498,15 @@ async function analyzePage(page, pageNum) {
   return analyzeLines(lines, pageNum);
 }
 
+async function renderPage(page, scale=2) {
+  const vp = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = vp.width;
+  canvas.height = vp.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+  return canvas.toDataURL('image/jpeg', 0.88).split(',')[1];
+}
+  
 async function analyzePageWithGeminiVision(page, pageNum) {
   const b64 = await renderPage(page);
   
