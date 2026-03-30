@@ -337,18 +337,25 @@ async function extractPageText(page) {
       currentLine = { y, text: text, fontSize: item.height, x: item.transform[4] };
       lines.push(currentLine);
     } else {
-      currentLine.text += ' ' + text;
+      // Si el fragmento anterior termina en guión, unir sin espacio
+if (currentLine.text.trimEnd().endsWith('-')) {
+  currentLine.text = currentLine.text.trimEnd().slice(0, -1) + text;
+} else {
+  currentLine.text += ' ' + text;
+}
     }
   }
 
   // Unir líneas que terminan en guión de separación silábica
   for (let i = 0; i < lines.length - 1; i++) {
-    if (lines[i].text.trimEnd().endsWith('-')) {
-      lines[i].text = lines[i].text.trimEnd().slice(0, -1) + lines[i+1].text.trimStart();
-      lines.splice(i+1, 1);
-      i--;
-    }
+  const trimmed = lines[i].text.trimEnd();
+  if (trimmed.endsWith('-')) {
+    // Unir sin espacio — quitar el guión y pegar directo
+    lines[i].text = trimmed.slice(0, -1) + lines[i+1].text.trimStart();
+    lines.splice(i+1, 1);
+    i--;
   }
+}
 
   // Filtrar números de página solos, letras sueltas y texto de una palabra muy corta
   return lines.filter(line => {
