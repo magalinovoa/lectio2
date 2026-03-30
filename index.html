@@ -166,7 +166,7 @@
 
 <header>
   <div class="logo">L<span>e</span>ctio</div>
-  <div class="tagline">PDF → EPUB · Motor Google Cloud Vision | 4.3 00.43</div>
+  <div class="tagline">PDF → EPUB · Motor Google Cloud Vision | 4.3 00.46</div>
 </header>
 
 <main>
@@ -507,20 +507,28 @@ if (shortRatio > 0.35) return true;
 }
   
 async function analyzePage(page, pageNum) {
-  const lines = await extractPageText(page);
+  const textContent = await page.getTextContent();
+  const rawItems = textContent.items.filter(i => i.str.trim());
 
   // Sin texto = scan
-  if (!lines || lines.length === 0) {
+  if (!rawItems.length) {
     log(`  ⚠ Página ${pageNum}: sin texto, usando Gemini Vision…`, 'log-info');
     return await analyzePageWithGeminiVision(page, pageNum);
   }
 
-  // Texto corrupto = fallback a Gemini Vision
-  if (isTextCorrupt(lines)) {
-    log(`  ⚠ Página ${pageNum}: texto corrupto, usando Gemini Vision…`, 'log-info');
+  // Verificar corrupción sobre items crudos
+  const shortItems = rawItems.filter(i => i.str.trim().length <= 3).length;
+  const shortRatio = shortItems / rawItems.length;
+  const fullText = rawItems.map(i => i.str).join(' ');
+  const weirdChars = (fullText.match(/[^\w\sáéíóúüñÁÉÍÓÚÜÑ.,;:!?¡¿«»\(\)\-–—"'\[\]]/g) || []).length;
+  const weirdRatio = weirdChars / fullText.length;
+
+  if (shortRatio > 0.35 || weirdRatio > 0.02) {
+    log(`  ⚠ Página ${pageNum}: texto fragmentado/corrupto, usando Gemini Vision…`, 'log-info');
     return await analyzePageWithGeminiVision(page, pageNum);
   }
 
+  const lines = await extractPageText(page);
   return analyzeLines(lines, pageNum);
 }
 
