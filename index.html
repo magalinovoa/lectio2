@@ -517,8 +517,6 @@ async function analyzePage(page, pageNum) {
   const fullText = rawItems.map(i => i.str).join(' ');
   const weirdChars = (fullText.match(/[^\w\sáéíóúüñÁÉÍÓÚÜÑ.,;:!?¡¿«»\(\)\-–—"'\[\]]/g) || []).length;
   const weirdRatio = weirdChars / fullText.length;
-
-console.log(`Página ${pageNum}: shortRatio=${shortRatio.toFixed(3)} weirdRatio=${weirdRatio.toFixed(3)}`);
   
   if (shortRatio > 0.25 || weirdRatio > 0.015) {
     log(`  ⚠ Página ${pageNum}: texto fragmentado/corrupto, usando Gemini Vision…`, 'log-info');
