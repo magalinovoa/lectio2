@@ -392,7 +392,7 @@ for (const line of lines) {
   const text = line.text.trim();
   if (!text) continue;
 
-  if (text.startsWith('[FN]')) {
+  if (text.includes('[FN]')) {
     footnoteStarted = true;
   }
 
