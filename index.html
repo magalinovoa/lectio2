@@ -536,9 +536,8 @@ Separé las notas al pie del cuerpo del texto. Si la página está en blanco dev
     const raw = parts[0].text.trim();
     const cleaned = raw.replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
     const parsed = JSON.parse(cleaned);
-      parsed._usedVision = true; // marcar que usó Vision
-      return parsed;
-    return JSON.parse(cleaned);
+    parsed._usedVision = true;
+    return parsed;
 
   } catch(e) {
     log(`  ✗ Página ${pageNum} Vision falló: ${e.message}`, 'log-err');
@@ -550,9 +549,7 @@ Separé las notas al pie del cuerpo del texto. Si la página está en blanco dev
     };
   }
 }
-
-  return analyzeLines(lines, pageNum);
-}
+  
 function buildEPUB(pages, meta) {
   const title     = meta.title     || 'Sin título';
   const author    = meta.author    || 'Desconocido';
