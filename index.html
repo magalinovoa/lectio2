@@ -392,12 +392,12 @@ for (const line of lines) {
   const text = line.text.trim();
   if (!text) continue;
 
-  if (text.replace(/\s/g, '').includes('[FN]')) {
+  if (/\[\s*F\s*N\s*\]/.test(text)) {
     footnoteStarted = true;
   }
 
   if (footnoteStarted) {
-    footnoteLines.push(text.replace('[FN]', '').trim());
+    footnoteLines.push(text.replace(/\[\s*F\s*N\s*\]/g, '').trim());
     continue;
   }
 
@@ -464,7 +464,7 @@ function isTextCorrupt(lines) {
   if (fullText.length < 20) return false;
 
   // Contar caracteres raros — símbolos que no pertenecen a texto español normal
-  const weirdChars = (fullText.match(/[^\w\sáéíóúüñÁÉÍÓÚÜÑ.,;:!?¡¿«»\(\)\[\]{}\-–—"'\/\\@#$%&*+=<>|~^`]/g) || []).length;
+  const weirdChars = (fullText.match(/[^\w\sáéíóúüñÁÉÍÓÚÜÑ.,;:!?¡¿«»\(\)\-–—"']/g) || []).length;
   const ratio = weirdChars / fullText.length;
 
   // Si más del 4% son caracteres raros, el texto está corrupto
