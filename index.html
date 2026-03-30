@@ -166,7 +166,7 @@
 
 <header>
   <div class="logo">L<span>e</span>ctio</div>
-  <div class="tagline">PDF → EPUB · Motor Google Cloud Vision | 4.3 00.46</div>
+  <div class="tagline">PDF → EPUB · Motor Google Cloud Vision | 4.3 00.51</div>
 </header>
 
 <main>
@@ -343,13 +343,20 @@ async function extractPageText(page) {
       currentLine = { y, text: text, fontSize: item.height, x: item.transform[4] };
       lines.push(currentLine);
     } else {
-      // Si el fragmento anterior termina en guión, unir sin espacio
-      if (currentLine.text.trimEnd().endsWith('-')) {
-        currentLine.text = currentLine.text.trimEnd().slice(0, -1) + text;
-      } else {
-        currentLine.text += ' ' + text;
-      }
-    }
+  const prev = currentLine.text;
+  const prevEndsClean = /[-\s]$/.test(prev) || /[.,:;!?»)\]]$/.test(prev.trimEnd());
+  const currStartsClean = /^[A-ZÁÉÍÓÚÑ\s«¿¡\[(]/.test(text);
+  
+  if (prev.trimEnd().endsWith('-')) {
+    // Guión explícito — unir sin espacio ni guión
+    currentLine.text = prev.trimEnd().slice(0, -1) + text;
+  } else if (!prevEndsClean && !currStartsClean) {
+    // Fragmento que continúa una palabra — unir sin espacio
+    currentLine.text = prev + text;
+  } else {
+    currentLine.text += ' ' + text;
+  }
+}
   }
 
 // Limpiar guiones de separación silábica dentro de cada línea
