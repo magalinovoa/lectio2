@@ -166,7 +166,7 @@
 
 <header>
   <div class="logo">L<span>e</span>ctio</div>
-  <div class="tagline">PDF → EPUB · Motor Google Cloud Vision | 4.3 00.39</div>
+  <div class="tagline">PDF → EPUB · Motor Google Cloud Vision | 4.3 00.43</div>
 </header>
 
 <main>
@@ -487,7 +487,12 @@ function isTextCorrupt(lines) {
   // Contar caracteres raros — símbolos que no pertenecen a texto español normal
   const weirdChars = (fullText.match(/[^\w\sáéíóúüñÁÉÍÓÚÜÑ.,;:!?¡¿«»\(\)\-–—"']/g) || []).length;
   const ratio = weirdChars / fullText.length;
-
+  
+// Detectar fragmentación excesiva — muchos items muy cortos
+const shortItems = lines.filter(l => l.text.trim().length <= 3).length;
+const shortRatio = shortItems / lines.length;
+if (shortRatio > 0.35) return true;
+  
   // Si más del 4% son caracteres raros, el texto está corrupto
   if (ratio > 0.02) return true;
 
