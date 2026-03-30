@@ -457,18 +457,96 @@ for (const line of lines) {
   };
 }
   
+function isTextCorrupt(lines) {
+  if (!lines || lines.length === 0) return false;
+  
+  const fullText = lines.map(l => l.text).join(' ');
+  if (fullText.length < 20) return false;
+
+  // Contar caracteres raros — símbolos que no pertenecen a texto español normal
+  const weirdChars = (fullText.match(/[^\w\sáéíóúüñÁÉÍÓÚÜÑ.,;:!?¡¿«»\(\)\[\]{}\-–—"'\/\\@#$%&*+=<>|~^`]/g) || []).length;
+  const ratio = weirdChars / fullText.length;
+
+  // Si más del 4% son caracteres raros, el texto está corrupto
+  if (ratio > 0.04) return true;
+
+  // Detectar palabras sin vocales (señal clara de corrupción)
+  const words = fullText.split(/\s+/).filter(w => w.length > 4);
+  const wordsWithoutVowels = words.filter(w => !/[aeiouáéíóúAEIOUÁÉÍÓÚ]/i.test(w));
+  const vowelRatio = wordsWithoutVowels.length / Math.max(words.length, 1);
+
+  if (vowelRatio > 0.08) return true;
+
+  return false;
+}
+  
 async function analyzePage(page, pageNum) {
   const lines = await extractPageText(page);
 
-  // Si no hay texto, es un scan — fallback a Gemini si está configurado
-  if (!lines) {
-    log(`  ⚠ Página ${pageNum}: sin texto embebido (posible scan)`, 'log-info');
+  // Sin texto = scan
+  if (!lines || lines.length === 0) {
+    log(`  ⚠ Página ${pageNum}: sin texto, usando Gemini Vision…`, 'log-info');
+    return await analyzePageWithGeminiVision(page, pageNum);
+  }
+
+  // Texto corrupto = fallback a Gemini Vision
+  if (isTextCorrupt(lines)) {
+    log(`  ⚠ Página ${pageNum}: texto corrupto, usando Gemini Vision…`, 'log-info');
+    return await analyzePageWithGeminiVision(page, pageNum);
+  }
+
+  return analyzeLines(lines, pageNum);
+}
+
+async function analyzePageWithGeminiVision(page, pageNum) {
+  const b64 = await renderPage(page);
+  
+  const prompt = `Analizá esta página de un libro académico y extraé su contenido.
+Devolvé SOLO JSON (sin texto adicional, sin markdown) con esta estructura exacta:
+{
+  "type": "cover|toc|dedication|content|blank",
+  "heading": "texto del encabezado principal si existe, sino null",
+  "heading_level": 1,
+  "subheadings": [],
+  "paragraphs": ["párrafo 1", "párrafo 2"],
+  "blockquotes": [],
+  "footnotes": ["nota al pie 1"],
+  "is_chapter_start": false
+}
+Separé las notas al pie del cuerpo del texto. Si la página está en blanco devolvé type: "blank".`;
+
+  try {
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageBase64: b64, prompt })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+
+    const parts = data.candidates?.[0]?.content?.parts;
+    if (!parts || !parts[0]?.text) throw new Error('Respuesta vacía de Gemini');
+
+    const raw = parts[0].text.trim();
+    const cleaned = raw.replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
+    return JSON.parse(cleaned);
+
+  } catch(e) {
+    log(`  ✗ Página ${pageNum} Vision falló: ${e.message}`, 'log-err');
     return {
       type: 'content',
-      paragraphs: [`[Página ${pageNum}: scan detectado — convertí con nivel Académico para procesar]`],
-      heading: null, heading_level: null, subheadings: [], blockquotes: [], footnotes: [], is_chapter_start: false
+      paragraphs: [`[Página ${pageNum}: no se pudo procesar]`],
+      heading: null, heading_level: null, subheadings: [],
+      blockquotes: [], footnotes: [], is_chapter_start: false
     };
   }
+}
 
   return analyzeLines(lines, pageNum);
 }
