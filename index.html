@@ -166,7 +166,7 @@
 
 <header>
   <div class="logo">L<span>e</span>ctio</div>
-  <div class="tagline">PDF → EPUB · Motor Google Cloud Vision | 4.3 00.24</div>
+  <div class="tagline">PDF → EPUB · Motor Google Cloud Vision | 4.3 00.30</div>
 </header>
 
 <main>
@@ -328,6 +328,14 @@ async function extractPageText(page) {
   let currentLine = null;
   const Y_THRESHOLD = 3;
 
+if (pageNum === 3) {
+  for (const item of items) {
+    if (item.str.includes('mo') || item.str.includes('ral')) {
+      console.log('ITEM:', JSON.stringify(item.str), 'x:', item.transform[4], 'y:', item.transform[5]);
+    }
+  }
+}
+  
   for (const item of items) {
     const y = Math.round(item.transform[5]);
     const text = item.str;
