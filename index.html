@@ -346,6 +346,14 @@ if (currentLine.text.trimEnd().endsWith('-')) {
     }
   }
 
+// Limpiar guiones de separación silábica dentro de cada línea
+for (const line of lines) {
+  // Detectar patrón: texto termina en guión seguido de texto sin espacio
+  line.text = line.text.replace(/(\w)-\s+(\w)/g, '$1$2');
+  // También limpiar guiones pegados con espacios raros
+  line.text = line.text.replace(/(\w)- (\w)/g, '$1$2');
+}
+  
   // Unir líneas que terminan en guión de separación silábica
   for (let i = 0; i < lines.length - 1; i++) {
   const trimmed = lines[i].text.trimEnd();
