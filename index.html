@@ -392,7 +392,7 @@ for (const line of lines) {
   const text = line.text.trim();
   if (!text) continue;
 
-  if (text.includes('[FN]')) {
+  if (text.replace(/\s/g, '').includes('[FN]')) {
     footnoteStarted = true;
   }
 
@@ -468,14 +468,14 @@ function isTextCorrupt(lines) {
   const ratio = weirdChars / fullText.length;
 
   // Si más del 4% son caracteres raros, el texto está corrupto
-  if (ratio > 0.04) return true;
+  if (ratio > 0.02) return true;
 
   // Detectar palabras sin vocales (señal clara de corrupción)
   const words = fullText.split(/\s+/).filter(w => w.length > 4);
   const wordsWithoutVowels = words.filter(w => !/[aeiouáéíóúAEIOUÁÉÍÓÚ]/i.test(w));
   const vowelRatio = wordsWithoutVowels.length / Math.max(words.length, 1);
 
-  if (vowelRatio > 0.08) return true;
+  if (vowelRatio > 0.05) return true;
 
   return false;
 }
